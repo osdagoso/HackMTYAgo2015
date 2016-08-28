@@ -20,6 +20,8 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
+    public static final String FILE_NAME = "harrison.jpg";
+
     private Camera mCamera = null;
     private CameraView mCameraView = null;
 
@@ -75,10 +77,7 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private static File getOutputMediaFile() {
-        File mediaStorageDir = new File(
-                Environment
-                        .getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-                "CameraApp");
+        File mediaStorageDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
         if (!mediaStorageDir.exists()) {
             if (!mediaStorageDir.mkdirs()) {
                 Log.d("CameraApp", "failed to create directory");
@@ -86,11 +85,9 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         // Create a media file name
-        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
-                .format(new Date());
         File mediaFile;
         mediaFile = new File(mediaStorageDir.getPath() + File.separator
-                + "IMG_" + timeStamp + ".bmp");
+                + FILE_NAME);
 
         return mediaFile;
     }
