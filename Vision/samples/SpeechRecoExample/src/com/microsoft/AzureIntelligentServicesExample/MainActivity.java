@@ -393,7 +393,7 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                 Speak("You're welcome.");
             }
             else if ((isTextAvailable && (instruction.equals("Yes") ||
-                    instruction.equals("Ok") ||
+                    instruction.equals("Okay") ||
                     instruction.equals("Yes please"))) ||
                     instruction.equals("Read the text")) {
                 if (isTextAvailable) {
@@ -406,7 +406,8 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                     Speak("I'm sorry. There's no text for me to read at the moment.");
                 }
             }
-            else if (isTextAvailable && (instruction.equals("No"))) {
+            else if (isTextAvailable && (instruction.equals("No") || instruction.equals("No thanks")
+                    || instruction.equals("No, thank you"))) {
                 Speak("Understood.");
                 isTextScanned = false;
                 isImageScanned = false;
@@ -685,7 +686,7 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                 if (label.getScore() > 0.75) {
                     if (!bSureLabel) {
                         //message += "This picture is about ";
-                        message += "This pictures is about " + label.getDescription();
+                        message += "This picture is about " + label.getDescription();
                         //message += label.getDescription();
                         bSureLabel = true;
                     }
