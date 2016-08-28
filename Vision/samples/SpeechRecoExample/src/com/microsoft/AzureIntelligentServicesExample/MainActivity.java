@@ -154,6 +154,10 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
             mCameraView = new CameraView(this, mCamera); //create a SurfaceView to show camera data
             FrameLayout camera_view = (FrameLayout)findViewById(R.id.camera_view);
             camera_view.addView(mCameraView); //add the SurfaceView to the layout
+
+            Camera.Parameters params = mCamera.getParameters();
+            params.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
+            mCamera.setParameters(params);
         }
 
         Intent checkTTSIntent = new Intent();
@@ -350,8 +354,8 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
             }
             else if (instruction.equals("Help")){
                 Speak("App can help you familiarize with your surroundings. Say take a photo to" +
-                        "snap a picture and get information about it or say help to hear this" +
-                        "again.");
+                        "snap a picture and get information about it. Say repeat and I'll say it" +
+                        "again. Say help to hear this again.");
             }
             else if (instruction.equals("Repeat") ||
                     instruction.equals("Repeat that") ||
