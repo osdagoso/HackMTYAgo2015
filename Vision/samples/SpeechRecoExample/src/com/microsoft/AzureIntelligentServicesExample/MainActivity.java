@@ -291,7 +291,9 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                 mCamera.takePicture(null, null, mPicture);
             }
             else if (instruction.equals("Help")){
-                Speak("App can help you familiarize with your surroundings. Say take a photo to snap a picture and get information about it or say help to hear this again.");
+                Speak("App can help you familiarize with your surroundings. Say take a photo to" +
+                        "snap a picture and get information about it or say help to hear this" +
+                        "again.");
             }
             else if (instruction.equals("Close application")){
                 Speak("Closing application.");
@@ -365,7 +367,8 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                 // audio data, you must first send up an SpeechAudioFormat descriptor to describe
                 // the layout and format of your raw audio data via DataRecognitionClient's sendAudioFormat() method.
 
-                String filename = recoMode == SpeechRecognitionMode.ShortPhrase ? "whatstheweatherlike.wav" : "batman.wav";
+                String filename = recoMode == SpeechRecognitionMode.ShortPhrase ?
+                        "whatstheweatherlike.wav" : "batman.wav";
                 InputStream fileStream = getAssets().open(filename);
                 int bytesRead = 0;
                 byte[] buffer = new byte[1024];
