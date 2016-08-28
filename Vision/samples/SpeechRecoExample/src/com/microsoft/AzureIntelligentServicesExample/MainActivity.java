@@ -746,14 +746,15 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                 //message += "\n";
             }
         }
-        /*
+
         if (faces != null) {
-            message += "\n\nI found ";
+            message += ". I found ";
             if (faces.size() > 1) {
-                message += String.format("%d faces: \n\n", faces.size());
+                message += String.format("%d people in this picture", faces.size());
             } else {
-                message += "1 face:\n\n";
+                message += "1 person in this picture";
             }
+            /*
             for (FaceAnnotation face : faces) {
                 message += "A ";
                 if (face.getJoyLikelihood().equals("VERY_LIKELY") || face.getJoyLikelihood().
@@ -782,8 +783,9 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                 }
                 message += "person.\n";
             }
+            */
         }
-        */
+
 
         if (isTextinResponse(response)) {
             message += ". I've also found some text. Would you like me to read it?";
