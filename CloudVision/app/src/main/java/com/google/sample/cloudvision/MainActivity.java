@@ -58,7 +58,7 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
     private static final String CLOUD_VISION_API_KEY = "AIzaSyB_KZTcCduNsOB8CVsAeqqKgeJqz3nPYwM";
-    public static final String FILE_NAME = "temp.jpg";
+    public static final String FILE_NAME = "harrison.jpg";
 
     private static final String TAG = MainActivity.class.getSimpleName();
     private static final int GALLERY_IMAGE_REQUEST = 1;
@@ -133,6 +133,12 @@ public class MainActivity extends AppCompatActivity {
                     if (isTextinResponse(bairResponse)) {
                         mImageDetails.setText(extractTextFromResponse(bairResponse));
                         isTextShown = true;
+                    }
+                    else {
+                        repeat.setVisibility(View.GONE);
+                        next.setVisibility(View.GONE);
+                        fab.setVisibility(View.VISIBLE);
+                        mImageDetails.setText("Use the camera button to select an image.");
                     }
                 }
                 else {
@@ -428,7 +434,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String convertResponseToString(BatchAnnotateImagesResponse response) {
-        String message = "I found these things:\n\n";
+        String message = "";
+
+        boolean bSureLabel = false;
+        boolean bUnsureLabel = false;
 
         List<EntityAnnotation> labels = response.getResponses().get(0).getLabelAnnotations();
         List<EntityAnnotation> logos = response.getResponses().get(0).getLogoAnnotations();
@@ -436,11 +445,36 @@ public class MainActivity extends AppCompatActivity {
 
         if (labels != null) {
             for (EntityAnnotation label : labels) {
-                message += String.format("%.3f: %s", label.getScore(), label.getDescription());
-                message += "\n";
+                if (label.getScore() > 0.75) {
+                    if (!bSureLabel) {
+                        message += "This picture is about ";
+                        message += label.getDescription();
+                        bSureLabel = true;
+                    }
+                    else {
+                        message += ", ";
+                        message += label.getDescription();
+                    }
+                }
+                else {
+                    if (!bUnsureLabel) {
+                        if (bSureLabel) {
+                            message += "\nIt may also be about ";
+                        } else {
+                            message += "This picture may be about ";
+                        }
+                        message += label.getDescription();
+                        bUnsureLabel = true;
+                    }
+                    else {
+                        message += ", ";
+                        message += label.getDescription();
+                    }
+                }
             }
+            message += "\n";
         } else {
-            message += "nothing";
+            message += "I'm sorry, I can't analyze this photo.\n";
         }
 
         if (logos != null) {
@@ -451,7 +485,7 @@ public class MainActivity extends AppCompatActivity {
                 message += "1 logo:\n\n";
             }
             for (EntityAnnotation logo : logos) {
-                message += String.format("%.3f: %s", logo.getScore(), logo.getDescription());
+                message += String.format("%s", logo.getDescription());
                 message += "\n";
             }
         }
@@ -464,18 +498,28 @@ public class MainActivity extends AppCompatActivity {
                 message += "1 face:\n\n";
             }
             for (FaceAnnotation face : faces) {
-                message += "Joy: ";
-                message += face.getJoyLikelihood();
-                message += "\n";
-                message += "Sorrow: ";
-                message += face.getSorrowLikelihood();
-                message += "\n";
-                message += "Anger: ";
-                message += face.getAngerLikelihood();
-                message += "\n";
-                message += "Surprise: ";
-                message += face.getSurpriseLikelihood();
-                message += "\n";
+                message += "A ";
+                if (face.getJoyLikelihood().equals("VERY_LIKELY") || face.getJoyLikelihood().equals("LIKELY")) {
+                    message += "happy, ";
+                } else if (face.getJoyLikelihood().equals("POSSIBLY")) {
+                    message += "possibly happy, ";
+                }
+                if (face.getSorrowLikelihood().equals("VERY_LIKELY") || face.getSorrowLikelihood().equals("LIKELY")) {
+                    message += "sad, ";
+                } else if (face.getSorrowLikelihood().equals("POSSIBLY")) {
+                    message += "possibly sad, ";
+                }
+                if (face.getAngerLikelihood().equals("VERY_LIKELY") || face.getAngerLikelihood().equals("LIKELY")) {
+                    message += "furious, ";
+                } else if (face.getAngerLikelihood().equals("POSSIBLY")) {
+                    message += "possibly angry, ";
+                }
+                if (face.getSurpriseLikelihood().equals("VERY_LIKELY") || face.getSurpriseLikelihood().equals("LIKELY")) {
+                    message += "surprised, ";
+                } else if (face.getSurpriseLikelihood().equals("POSSIBLY")) {
+                    message += "possibly surprised, ";
+                }
+                message += "person.\n";
             }
         }
 
