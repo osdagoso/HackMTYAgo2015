@@ -67,6 +67,12 @@ public class MainActivity extends AppCompatActivity {
 
     private TextView mImageDetails;
     private ImageView mMainImage;
+    private FloatingActionButton fab;
+    private FloatingActionButton repeat;
+    private FloatingActionButton next;
+
+    private BatchAnnotateImagesResponse bairResponse = new BatchAnnotateImagesResponse();
+    private boolean isTextShown = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,7 +82,7 @@ public class MainActivity extends AppCompatActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -94,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
                             @Override
                             public void onClick(DialogInterface dialog, int which) {
                                 */
-                                startCamera();
+                startCamera();
                 /*
                             }
                         });
@@ -105,8 +111,43 @@ public class MainActivity extends AppCompatActivity {
 
         mImageDetails = (TextView) findViewById(R.id.image_details);
         mMainImage = (ImageView) findViewById(R.id.main_image);
+
+        repeat = (FloatingActionButton) findViewById(R.id.repeat);
+        repeat.setVisibility(View.GONE);
+        repeat.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (isTextShown) {
+                    mImageDetails.setText(extractTextFromResponse(bairResponse));
+                } else {
+                    mImageDetails.setText(convertResponseToString(bairResponse));
+                }
+            }
+        });
+        next = (FloatingActionButton) findViewById(R.id.next);
+        next.setVisibility(View.GONE);
+        next.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (!isTextShown) {
+                    if (isTextinResponse(bairResponse)) {
+                        mImageDetails.setText(extractTextFromResponse(bairResponse));
+                        isTextShown = true;
+                    }
+                }
+                else {
+                    repeat.setVisibility(View.GONE);
+                    next.setVisibility(View.GONE);
+                    fab.setVisibility(View.VISIBLE);
+                    mImageDetails.setText("Use the camera button to select an image.");
+                    isTextShown = false;
+                }
+            }
+        });
+
     }
 
+    /*
     public void startGalleryChooser() {
         Intent intent = new Intent();
         intent.setType("image/*");
@@ -114,6 +155,7 @@ public class MainActivity extends AppCompatActivity {
         startActivityForResult(Intent.createChooser(intent, "Select a photo"),
                 GALLERY_IMAGE_REQUEST);
     }
+    */
 
     public void startCamera() {
         if (PermissionUtils.requestPermission(
@@ -179,6 +221,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void callCloudVision(final Bitmap bitmap) throws IOException {
         // Switch text to loading
+        fab.setVisibility(View.GONE);
         mImageDetails.setText(R.string.loading_message);
 
         // Do the real work in an async task, because we need to use the network anyway
@@ -246,8 +289,96 @@ public class MainActivity extends AppCompatActivity {
                     annotateRequest.setDisableGZipContent(true);
                     Log.d(TAG, "created Cloud Vision request object, sending request");
 
-                    BatchAnnotateImagesResponse response = annotateRequest.execute();
+                    bairResponse = annotateRequest.execute();
+                    return convertResponseToString(bairResponse);
+                    //return "Use the floating action button to select an image.";
+
+                } catch (GoogleJsonResponseException e) {
+                    Log.d(TAG, "failed to make API request because " + e.getContent());
+                } catch (IOException e) {
+                    Log.d(TAG, "failed to make API request because of other IOException " +
+                            e.getMessage());
+                }
+                return "Cloud Vision API request failed. Check logs for details.";
+            }
+
+            protected void onPostExecute(String result) {
+                repeat.setVisibility(View.VISIBLE);
+                next.setVisibility(View.VISIBLE);
+
+                mImageDetails.setText(result);
+            }
+        }.execute();
+
+        /*
+        // Do the real work in an async task, because we need to use the network anyway
+        new AsyncTask<Object, Void, String>() {
+            @Override
+            protected String doInBackground(Object... params) {
+                try {
+                    HttpTransport httpTransport = AndroidHttp.newCompatibleTransport();
+                    JsonFactory jsonFactory = GsonFactory.getDefaultInstance();
+
+                    Vision.Builder builder = new Vision.Builder(httpTransport, jsonFactory, null);
+                    builder.setVisionRequestInitializer(new
+                            VisionRequestInitializer(CLOUD_VISION_API_KEY));
+                    Vision vision = builder.build();
+
+                    BatchAnnotateImagesRequest batchAnnotateImagesRequest =
+                            new BatchAnnotateImagesRequest();
+                    batchAnnotateImagesRequest.setRequests(new ArrayList<AnnotateImageRequest>() {{
+                        AnnotateImageRequest annotateImageRequest = new AnnotateImageRequest();
+
+                        // Add the image
+                        Image base64EncodedImage = new Image();
+                        // Convert the bitmap to a JPEG
+                        // Just in case it's a format that Android understands but Cloud Vision
+                        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, byteArrayOutputStream);
+                        byte[] imageBytes = byteArrayOutputStream.toByteArray();
+
+                        // Base64 encode the JPEG
+                        base64EncodedImage.encodeContent(imageBytes);
+                        annotateImageRequest.setImage(base64EncodedImage);
+
+                        // add the features we want
+                        annotateImageRequest.setFeatures(new ArrayList<Feature>() {{
+                            Feature labelDetection = new Feature();
+                            Feature logoDetection = new Feature();
+                            Feature textDetection = new Feature();
+                            Feature faceDetection = new Feature();
+
+                            labelDetection.setType("LABEL_DETECTION");
+                            labelDetection.setMaxResults(5);
+
+                            logoDetection.setType("LOGO_DETECTION");
+                            labelDetection.setMaxResults(5);
+
+                            textDetection.setType("TEXT_DETECTION");
+                            textDetection.setMaxResults(5);
+
+                            faceDetection.setType("FACE_DETECTION");
+                            textDetection.setMaxResults(5);
+
+                            add(labelDetection);
+                            add(logoDetection);
+                            add(textDetection);
+                            add(faceDetection);
+                        }});
+
+                        // Add the list of one thing to the request
+                        add(annotateImageRequest);
+                    }});
+
+                    Vision.Images.Annotate annotateRequest =
+                            vision.images().annotate(batchAnnotateImagesRequest);
+                    // Due to a bug: requests to Vision API containing large images fail when GZipped.
+                    annotateRequest.setDisableGZipContent(true);
+                    Log.d(TAG, "created Cloud Vision request object, sending request");
+
+                    response = annotateRequest.execute();
                     return convertResponseToString(response);
+                    //return "Use the floating action button to select an image.";
 
                 } catch (GoogleJsonResponseException e) {
                     Log.d(TAG, "failed to make API request because " + e.getContent());
@@ -260,8 +391,10 @@ public class MainActivity extends AppCompatActivity {
 
             protected void onPostExecute(String result) {
                 mImageDetails.setText(result);
+                fab.setVisibility(View.VISIBLE);
             }
         }.execute();
+        */
     }
 
     public Bitmap scaleBitmapDown(Bitmap bitmap, int maxDimension) {
@@ -284,12 +417,21 @@ public class MainActivity extends AppCompatActivity {
         return Bitmap.createScaledBitmap(bitmap, resizedWidth, resizedHeight, false);
     }
 
+    private boolean isTextinResponse(BatchAnnotateImagesResponse response) {
+        List<EntityAnnotation> texts = response.getResponses().get(0).getTextAnnotations();
+        if (texts != null) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
     private String convertResponseToString(BatchAnnotateImagesResponse response) {
         String message = "I found these things:\n\n";
 
         List<EntityAnnotation> labels = response.getResponses().get(0).getLabelAnnotations();
         List<EntityAnnotation> logos = response.getResponses().get(0).getLogoAnnotations();
-        List<EntityAnnotation> texts = response.getResponses().get(0).getTextAnnotations();
         List<FaceAnnotation> faces = response.getResponses().get(0).getFaceAnnotations();
 
         if (labels != null) {
@@ -337,11 +479,24 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        if (isTextinResponse(response)) {
+            message += "\n\nText has been found. Press NEXT to read it.";
+        }
+
+        return message;
+    }
+
+    private String extractTextFromResponse(BatchAnnotateImagesResponse response) {
+        String message = "I found this text: \n\n";
+
+        List<EntityAnnotation> texts = response.getResponses().get(0).getTextAnnotations();
+
         if (texts != null) {
-            message += "\n\nI found this text:\n\n";
             EntityAnnotation text = texts.get(0);
             message += String.format("%s", text.getDescription());
             message += "\n";
+        } else {
+            message += "nothing";
         }
 
         return message;
