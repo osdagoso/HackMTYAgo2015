@@ -371,6 +371,23 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
             else if (instruction.equals("Bro")) {
                 Speak("I love you, Bro.");
             }
+            else if (instruction.equals("I am your father")) {
+                Speak("No!");
+            }
+            else if (instruction.equals("Who are you") ||
+                    instruction.equals("What's your name")) {
+                Speak("A robot has no name.");
+            }
+            else if (instruction.equals("Are you religious")) {
+                Speak("Lord of light, cast your light upon us. For the night is dark and full of" +
+                        "terrors.");
+            }
+            else if (instruction.equals("Shame")) {
+                Speak("Shame. Shame. Tee ling. Tee ling.");
+            }
+            else if (instruction.equals("What does Marcellus Wallace look like")) {
+                Speak("Does he look like a bee tch");
+            }
             else if (instruction.equals("Thanks") ||
                     instruction.equals("Thank you")) {
                 Speak("You're welcome.");
@@ -709,7 +726,7 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
 
         if (logos != null) {
             //message += "\n\nI found ";
-            Speak (" I found ");
+            message += ". I found ";
             if (logos.size() > 1) {
                 message += String.format("&i logos ", logos.size());
                 //Speak(String.format("&i logos", logos.size()));
