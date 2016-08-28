@@ -36,15 +36,35 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.hardware.Camera;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
+import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.Toast;
+
+import com.google.api.client.extensions.android.http.AndroidHttp;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
+import com.google.api.client.http.HttpTransport;
+import com.google.api.client.json.JsonFactory;
+import com.google.api.client.json.gson.GsonFactory;
+import com.google.api.services.vision.v1.Vision;
+import com.google.api.services.vision.v1.VisionRequestInitializer;
+import com.google.api.services.vision.v1.model.AnnotateImageRequest;
+import com.google.api.services.vision.v1.model.BatchAnnotateImagesRequest;
+import com.google.api.services.vision.v1.model.BatchAnnotateImagesResponse;
+import com.google.api.services.vision.v1.model.EntityAnnotation;
+import com.google.api.services.vision.v1.model.FaceAnnotation;
+import com.google.api.services.vision.v1.model.Feature;
+import com.google.api.services.vision.v1.model.Image;
 
 import com.microsoft.projectoxford.speechrecognition.DataRecognitionClient;
 import com.microsoft.projectoxford.speechrecognition.ISpeechRecognitionServerEvents;
@@ -53,21 +73,35 @@ import com.microsoft.projectoxford.speechrecognition.RecognitionResult;
 import com.microsoft.projectoxford.speechrecognition.SpeechRecognitionMode;
 import com.microsoft.projectoxford.speechrecognition.SpeechRecognitionServiceFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends Activity implements ISpeechRecognitionServerEvents, TextToSpeech.OnInitListener
 {
+    private static final String CLOUD_VISION_API_KEY = "AIzaSyB_KZTcCduNsOB8CVsAeqqKgeJqz3nPYwM";
+    public static final String FILE_NAME = "image.bmp";
+    private static final String TAG = MainActivity.class.getSimpleName();
+
     private int MY_DATA_CHECK_CODE = 0;
     private TextToSpeech myTTS;
 
     private Camera mCamera = null;
     private CameraView mCameraView = null;
+
+    private BatchAnnotateImagesResponse bairResponse = new BatchAnnotateImagesResponse();
+    private boolean isTextAvailable = false;
+    private boolean isImageScanned = false;
+    private boolean isTextScanned = false;
+
+    private boolean canListen = true;
 
     MicrophoneRecognitionClient micClient = null;
 
@@ -159,6 +193,7 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                 FileOutputStream fos = new FileOutputStream(pictureFile);
                 fos.write(data);
                 fos.close();
+                uploadImage(Uri.fromFile(pictureFile));
             } catch (FileNotFoundException e) {
             } catch (IOException e) {
             }
@@ -179,7 +214,7 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
         }
         // Create a media file name
         File mediaFile;
-        mediaFile = new File(mediaStorageDir.getPath() + File.separator + "image.bmp");
+        mediaFile = new File(mediaStorageDir.getPath() + File.separator + FILE_NAME);
 
         return mediaFile;
     }
@@ -196,7 +231,12 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                 @Override
                 public void onDone(String s) {
                     System.out.println("SSSSSSSSSS:" + s);
-                    micClient.startMicAndRecognition();
+                    if (micClient != null)
+                    {
+                        micClient.endMicAndRecognition();
+                    }
+                    StartListening();
+                    Log.d(TAG, "Lol");
                 }
 
                 @Override
@@ -265,7 +305,9 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                     this.getLuisSubscriptionID());
         }
 
-        this.micClient.startMicAndRecognition();
+        if (canListen) {
+            this.micClient.startMicAndRecognition();
+        }
     }
 
     public void onFinalResponseReceived(final RecognitionResult response) {
@@ -283,20 +325,87 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
 
         if (instruction.length() > 0) {
             instruction = instruction.substring(0, instruction.length() - 1);
-            if (instruction.equals("Take a photo") ||
+            if (instruction.equals("Hi") ||
+                    instruction.equals("Hello") ||
+                    instruction.equals("Hey")) {
+                int iRand = (1 + (int)(Math.random() * 9));
+                if(iRand <= 3) {
+                    Speak("Hi");
+                }
+                else if (iRand > 3 && iRand <= 6){
+                    Speak("Hey");
+                }
+                else {
+                    Speak("Hello");
+                }
+            }
+            else if (instruction.equals("Take a photo") ||
                     instruction.equals("Take a picture") ||
                     instruction.equals("Take photo") ||
                     instruction.equals("Take picture")) {
-                Speak("Taking picture");
+                Speak("Taking picture. Scanning.");
+                isTextAvailable = false;
                 mCamera.takePicture(null, null, mPicture);
+                canListen = false;
             }
             else if (instruction.equals("Help")){
                 Speak("App can help you familiarize with your surroundings. Say take a photo to" +
                         "snap a picture and get information about it or say help to hear this" +
                         "again.");
             }
-            else if (instruction.equals("Close application")){
-                Speak("Closing application.");
+            else if (instruction.equals("Repeat") ||
+                    instruction.equals("Repeat that") ||
+                    instruction.equals("Can you repeat that")) {
+                if (isImageScanned) {
+                    canListen = false;
+                    convertResponseToString(bairResponse);
+                }
+                else if (isTextScanned) {
+                    canListen = false;
+                    extractTextFromResponse(bairResponse);
+                }
+                else {
+                    Speak("I'm sorry. There's no information for me to repeat.");
+                }
+            }
+            else if (instruction.equals("Bro")) {
+                Speak("I love you, Bro.");
+            }
+            else if (instruction.equals("Thanks") ||
+                    instruction.equals("Thank you")) {
+                Speak("You're welcome.");
+            }
+            else if ((isTextAvailable && (instruction.equals("Yes") ||
+                    instruction.equals("Ok") ||
+                    instruction.equals("Yes please"))) ||
+                    instruction.equals("Read the text")) {
+                if (isTextAvailable) {
+                    canListen = false;
+                    isTextScanned = true;
+                    isImageScanned = false;
+                    extractTextFromResponse(bairResponse);
+                }
+                else {
+                    Speak("I'm sorry. There's no text for me to read at the moment.");
+                }
+            }
+            else if (isTextAvailable && (instruction.equals("No"))) {
+                Speak("Understood.");
+                isTextScanned = false;
+                isImageScanned = false;
+                isTextAvailable = false;
+            }
+            else if (instruction.equals("Close application") ||
+                    instruction.equals("Goodbye") ||
+                    instruction.equals("Bye") ||
+                    instruction.equals("Good bye")){
+                int iRand = (1 + (int)(Math.random() * 9));
+                if (iRand <= 5) {
+                    Speak("Goodbye.");
+                }
+                else {
+                    Speak("Bye.");
+                }
                 try {
                     Thread.sleep(1500);
                 } catch (InterruptedException e)
@@ -307,7 +416,7 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                 System.exit(0);
             }
             else {
-                Speak("I'm sorry. I didn't get that");
+                Speak("I'm sorry. I don't understand what you mean.");
             }
         } else {
             StartListening();
@@ -392,5 +501,299 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
 
             return null;
         }
+    }
+
+    public void uploadImage(Uri uri) {
+        if (uri != null) {
+            try {
+                // scale the image to save on bandwidth
+                Bitmap bitmap =
+                        scaleBitmapDown(
+                                MediaStore.Images.Media.getBitmap(getContentResolver(), uri),
+                                1200);
+
+                callCloudVision(bitmap);
+                //mMainImage.setImageBitmap(bitmap);
+
+            } catch (IOException e) {
+                Log.d(TAG, "Image picking failed because " + e.getMessage());
+                Toast.makeText(this, R.string.image_picker_error, Toast.LENGTH_LONG).show();
+            }
+        } else {
+            Log.d(TAG, "Image picker gave us a null image.");
+            Toast.makeText(this, R.string.image_picker_error, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void callCloudVision(final Bitmap bitmap) throws IOException {
+        // Switch text to loading
+        //fab.setVisibility(View.GONE);
+        //mImageDetails.setText(R.string.loading_message);
+
+        // Do the real work in an async task, because we need to use the network anyway
+        new AsyncTask<Object, Void, String>() {
+            @Override
+            protected String doInBackground(Object... params) {
+                try {
+                    HttpTransport httpTransport = AndroidHttp.newCompatibleTransport();
+                    JsonFactory jsonFactory = GsonFactory.getDefaultInstance();
+
+                    Vision.Builder builder = new Vision.Builder(httpTransport, jsonFactory, null);
+                    builder.setVisionRequestInitializer(new
+                            VisionRequestInitializer(CLOUD_VISION_API_KEY));
+                    Vision vision = builder.build();
+
+                    BatchAnnotateImagesRequest batchAnnotateImagesRequest =
+                            new BatchAnnotateImagesRequest();
+                    batchAnnotateImagesRequest.setRequests(new ArrayList<AnnotateImageRequest>() {{
+                        AnnotateImageRequest annotateImageRequest = new AnnotateImageRequest();
+
+                        // Add the image
+                        Image base64EncodedImage = new Image();
+                        // Convert the bitmap to a JPEG
+                        // Just in case it's a format that Android understands but Cloud Vision
+                        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, byteArrayOutputStream);
+                        byte[] imageBytes = byteArrayOutputStream.toByteArray();
+
+                        // Base64 encode the JPEG
+                        base64EncodedImage.encodeContent(imageBytes);
+                        annotateImageRequest.setImage(base64EncodedImage);
+
+                        // add the features we want
+                        annotateImageRequest.setFeatures(new ArrayList<Feature>() {{
+                            Feature labelDetection = new Feature();
+                            Feature logoDetection = new Feature();
+                            Feature textDetection = new Feature();
+                            Feature faceDetection = new Feature();
+
+                            labelDetection.setType("LABEL_DETECTION");
+                            labelDetection.setMaxResults(5);
+
+                            logoDetection.setType("LOGO_DETECTION");
+                            labelDetection.setMaxResults(5);
+
+                            textDetection.setType("TEXT_DETECTION");
+                            textDetection.setMaxResults(5);
+
+                            faceDetection.setType("FACE_DETECTION");
+                            textDetection.setMaxResults(5);
+
+                            add(labelDetection);
+                            add(logoDetection);
+                            add(textDetection);
+                            add(faceDetection);
+                        }});
+
+                        // Add the list of one thing to the request
+                        add(annotateImageRequest);
+                    }});
+
+                    Vision.Images.Annotate annotateRequest =
+                            vision.images().annotate(batchAnnotateImagesRequest);
+                    // Due to a bug: requests to Vision API containing large images fail when GZipped.
+                    annotateRequest.setDisableGZipContent(true);
+                    Log.d(TAG, "created Cloud Vision request object, sending request");
+
+                    Log.d(TAG, "Ya escaneo.");
+                    bairResponse = annotateRequest.execute();
+                    Log.d(TAG, "response received and stored");
+                    return convertResponseToString(bairResponse);
+                    //return "Use the floating action button to select an image.";
+                    //return "Pato";
+
+                } catch (GoogleJsonResponseException e) {
+                    Log.d(TAG, "failed to make API request because " + e.getContent());
+                } catch (IOException e) {
+                    Log.d(TAG, "failed to make API request because of other IOException " +
+                            e.getMessage());
+                }
+                return "Cloud Vision API request failed. Check logs for details.";
+            }
+
+            protected void onPostExecute(String result) {
+                //repeat.setVisibility(View.VISIBLE);
+                //next.setVisibility(View.VISIBLE);
+
+                //mImageDetails.setText(result);
+            }
+        }.execute();
+    }
+
+    public Bitmap scaleBitmapDown(Bitmap bitmap, int maxDimension) {
+
+        int originalWidth = bitmap.getWidth();
+        int originalHeight = bitmap.getHeight();
+        int resizedWidth = maxDimension;
+        int resizedHeight = maxDimension;
+
+        if (originalHeight > originalWidth) {
+            resizedHeight = maxDimension;
+            resizedWidth = (int) (resizedHeight * (float) originalWidth / (float) originalHeight);
+        } else if (originalWidth > originalHeight) {
+            resizedWidth = maxDimension;
+            resizedHeight = (int) (resizedWidth * (float) originalHeight / (float) originalWidth);
+        } else if (originalHeight == originalWidth) {
+            resizedHeight = maxDimension;
+            resizedWidth = maxDimension;
+        }
+        return Bitmap.createScaledBitmap(bitmap, resizedWidth, resizedHeight, false);
+    }
+
+    // Function that checks if there's readable text in the last analyzed image
+    private boolean isTextinResponse(BatchAnnotateImagesResponse response) {
+        List<EntityAnnotation> texts = response.getResponses().get(0).getTextAnnotations();
+        if (texts != null) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
+    // Function that interprets the analyzed image's data and stores it in a string
+    private String convertResponseToString(BatchAnnotateImagesResponse response) {
+        String message = "";
+
+        boolean bSureLabel = false;
+        boolean bUnsureLabel = false;
+
+        // Store found labels, logos and faces in lists
+        List<EntityAnnotation> labels = response.getResponses().get(0).getLabelAnnotations();
+        List<EntityAnnotation> logos = response.getResponses().get(0).getLogoAnnotations();
+        List<FaceAnnotation> faces = response.getResponses().get(0).getFaceAnnotations();
+
+        if (labels != null) {
+            for (EntityAnnotation label : labels) {
+                if (label.getScore() > 0.75) {
+                    if (!bSureLabel) {
+                        //message += "This picture is about ";
+                        message += "This pictures is about " + label.getDescription();
+                        //message += label.getDescription();
+                        bSureLabel = true;
+                    }
+                    else {
+                        message += ", ";
+                        message += label.getDescription();
+                        //Speak(label.getDescription());
+                    }
+                }
+                else {
+                    if (!bUnsureLabel) {
+                        if (bSureLabel) {
+                            //message += "\nIt may also be about ";
+                            message +=". It may also be about ";
+                        } else {
+                            message += "This picture may be about ";
+                            //Speak("This picture may be about ");
+                        }
+                        message += label.getDescription();
+                        //Speak (label.getDescription());
+                        bUnsureLabel = true;
+                    }
+                    else {
+                        message += ", ";
+                        message += label.getDescription();
+                        //Speak (label.getDescription());
+                    }
+                }
+            }
+            //message += "\n";
+        } else {
+            message += "I'm sorry, I can't analyze this photo.";
+            //Speak ("I'm sorry, I can't analyze this photo.");
+            Speak(message);
+            canListen = true;
+            return message;
+        }
+
+        if (logos != null) {
+            //message += "\n\nI found ";
+            Speak (" I found ");
+            if (logos.size() > 1) {
+                message += String.format("&i logos ", logos.size());
+                //Speak(String.format("&i logos", logos.size()));
+            } else {
+                message += "1 logo ";
+                //Speak("1 logo");
+            }
+            for (EntityAnnotation logo : logos) {
+                message += ", ";
+                message += logo.getDescription();
+                //Speak(logo.getDescription());
+                //message += "\n";
+            }
+        }
+        /*
+        if (faces != null) {
+            message += "\n\nI found ";
+            if (faces.size() > 1) {
+                message += String.format("%d faces: \n\n", faces.size());
+            } else {
+                message += "1 face:\n\n";
+            }
+            for (FaceAnnotation face : faces) {
+                message += "A ";
+                if (face.getJoyLikelihood().equals("VERY_LIKELY") || face.getJoyLikelihood().
+                        equals("LIKELY")) {
+                    message += "happy, ";
+                } else if (face.getJoyLikelihood().equals("POSSIBLY")) {
+                    message += "possibly happy, ";
+                }
+                if (face.getSorrowLikelihood().equals("VERY_LIKELY") || face.getSorrowLikelihood().
+                        equals("LIKELY")) {
+                    message += "sad, ";
+                } else if (face.getSorrowLikelihood().equals("POSSIBLY")) {
+                    message += "possibly sad, ";
+                }
+                if (face.getAngerLikelihood().equals("VERY_LIKELY") || face.getAngerLikelihood().
+                        equals("LIKELY")) {
+                    message += "furious, ";
+                } else if (face.getAngerLikelihood().equals("POSSIBLY")) {
+                    message += "possibly angry, ";
+                }
+                if (face.getSurpriseLikelihood().equals("VERY_LIKELY") || face.
+                        getSurpriseLikelihood().equals("LIKELY")) {
+                    message += "surprised, ";
+                } else if (face.getSurpriseLikelihood().equals("POSSIBLY")) {
+                    message += "possibly surprised, ";
+                }
+                message += "person.\n";
+            }
+        }
+        */
+
+        if (isTextinResponse(response)) {
+            message += ". I've also found some text. Would you like me to read it?";
+            //Speak("I've also found some text. Would you like me to read it?");
+            isTextAvailable = true;
+        }
+
+        Speak(message);
+        isImageScanned = true;
+        canListen = true;
+
+        return message;
+    }
+
+    // Function that extracts text found in an image and stores it in a string
+    private String extractTextFromResponse(BatchAnnotateImagesResponse response) {
+        String message = "Reading the text... ";
+        //Speak("Reading the text");
+
+        // Store the found text and its individual words in a list
+        List<EntityAnnotation> texts = response.getResponses().get(0).getTextAnnotations();
+
+        if (texts != null) {
+            EntityAnnotation text = texts.get(0);
+            message += text.getDescription();
+        } else {
+            message += "nothing";
+        }
+
+        Speak(message);
+        canListen = true;
+
+        return message;
     }
 }
