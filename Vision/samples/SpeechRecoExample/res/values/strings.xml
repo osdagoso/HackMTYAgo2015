@@ -16,10 +16,11 @@
     <string name="appReady">App is ready</string>
     <string name="takingPhoto">Taking photo</string>
     <string name="helpInfo">App can help you familiarize with your surroundings. Say take a photo to snap a picture and get information about it or say help to hear this again.</string>
+    <string name="closingApp">Closing app</string>
 
     <string name="takeAPhoto">Take a photo</string>
     <string name="takeAPicture">Take a picture</string>
     <string name="takePhoto">Take photo</string>
     <string name="takePicture">Take picture</string>
-    <string name="help">Help</string>
+    <string name="close">Close app</string>
 </resources>

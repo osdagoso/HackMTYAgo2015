@@ -36,12 +36,15 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.hardware.Camera;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
-import android.widget.TextView;
+import android.util.Log;
+import android.widget.FrameLayout;
 
 import com.microsoft.projectoxford.speechrecognition.DataRecognitionClient;
 import com.microsoft.projectoxford.speechrecognition.ISpeechRecognitionServerEvents;
@@ -50,6 +53,10 @@ import com.microsoft.projectoxford.speechrecognition.RecognitionResult;
 import com.microsoft.projectoxford.speechrecognition.SpeechRecognitionMode;
 import com.microsoft.projectoxford.speechrecognition.SpeechRecognitionServiceFactory;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Locale;
@@ -59,13 +66,10 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
     private int MY_DATA_CHECK_CODE = 0;
     private TextToSpeech myTTS;
 
-    DataRecognitionClient dataClient = null;
+    private Camera mCamera = null;
+    private CameraView mCameraView = null;
+
     MicrophoneRecognitionClient micClient = null;
-    FinalResponseStatus isReceivedResponse = FinalResponseStatus.NotReceived;
-
-    TextView mTextView;
-
-    public enum FinalResponseStatus { NotReceived, OK, Timeout }
 
     /**
      * Gets the primary subscription key
@@ -110,7 +114,13 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mTextView = (TextView) findViewById(R.id.mainText);
+        mCamera = getCameraInstance();
+
+        if(mCamera != null) {
+            mCameraView = new CameraView(this, mCamera); //create a SurfaceView to show camera data
+            FrameLayout camera_view = (FrameLayout)findViewById(R.id.camera_view);
+            camera_view.addView(mCameraView); //add the SurfaceView to the layout
+        }
 
         Intent checkTTSIntent = new Intent();
         checkTTSIntent.setAction(TextToSpeech.Engine.ACTION_CHECK_TTS_DATA);
@@ -128,6 +138,52 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
         This.StartListening();
     }
 
+    private Camera getCameraInstance() {
+        Camera camera = null;
+        try {
+            camera = Camera.open();
+        } catch (Exception e) {
+            Log.d("ERROR", "Failed to get camera: " + e.getMessage());
+        }
+        return camera;
+    }
+
+    Camera.PictureCallback mPicture = new Camera.PictureCallback() {
+        @Override
+        public void onPictureTaken(byte[] data, Camera camera) {
+            File pictureFile = getOutputMediaFile();
+            if (pictureFile == null) {
+                return;
+            }
+            try {
+                FileOutputStream fos = new FileOutputStream(pictureFile);
+                fos.write(data);
+                fos.close();
+            } catch (FileNotFoundException e) {
+            } catch (IOException e) {
+            }
+            mCamera.startPreview();
+        }
+    };
+
+    private static File getOutputMediaFile() {
+        File mediaStorageDir = new File(
+                Environment
+                        .getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                "Vision");
+        if (!mediaStorageDir.exists()) {
+            if (!mediaStorageDir.mkdirs()) {
+                Log.d("Vision", "failed to create directory");
+                return null;
+            }
+        }
+        // Create a media file name
+        File mediaFile;
+        mediaFile = new File(mediaStorageDir.getPath() + File.separator + "image.bmp");
+
+        return mediaFile;
+    }
+
     public void onInit(int initStatus) {
         if (initStatus == TextToSpeech.SUCCESS) {
             myTTS.setLanguage(Locale.US);
@@ -139,6 +195,7 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
 
                 @Override
                 public void onDone(String s) {
+                    System.out.println("SSSSSSSSSS:" + s);
                     micClient.startMicAndRecognition();
                 }
 
@@ -230,10 +287,22 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
                     instruction.equals("Take a picture") ||
                     instruction.equals("Take photo") ||
                     instruction.equals("Take picture")) {
-                Speak("Taking photos");
+                Speak("Taking picture");
+                mCamera.takePicture(null, null, mPicture);
             }
-            else if(instruction.equals("Help")){
+            else if (instruction.equals("Help")){
                 Speak("App can help you familiarize with your surroundings. Say take a photo to snap a picture and get information about it or say help to hear this again.");
+            }
+            else if (instruction.equals("Close application")){
+                Speak("Closing application.");
+                try {
+                    Thread.sleep(1500);
+                } catch (InterruptedException e)
+                {
+                    // do nothing
+                }
+                this.finish();
+                System.exit(0);
             }
             else {
                 Speak("I'm sorry. I didn't get that");
@@ -241,9 +310,6 @@ public class MainActivity extends Activity implements ISpeechRecognitionServerEv
         } else {
             StartListening();
         }
-
-        mTextView.setText(instruction);
-
     }
 
     /**
